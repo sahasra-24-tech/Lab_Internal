@@ -1,0 +1,83 @@
+pipeline {
+    agent any
+
+    options {
+        skipDefaultCheckout(true)
+        timestamps()
+    }
+
+    parameters {
+        booleanParam(
+            name: 'DEPLOY',
+            defaultValue: false,
+            description: 'Copy the application files to the deployment directory after a successful build'
+        )
+        string(
+            name: 'DEPLOY_PATH',
+            defaultValue: 'C:\\Jenkins\\deploy\\devops-lab',
+            description: 'Directory on the Jenkins agent where the application should be deployed'
+        )
+    }
+
+    environment {
+        PYTHON = 'python'
+        PIP_DISABLE_PIP_VERSION_CHECK = '1'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install dependencies') {
+            steps {
+                bat '''
+                    %PYTHON% -m pip install --user Flask
+                '''
+            }
+        }
+
+        stage('Validate') {
+            steps {
+                bat '''
+                    %PYTHON% -m py_compile app.py
+                    %PYTHON% -c "from app import app, users; client = app.test_client(); users.clear(); assert client.get('/login').status_code == 200; assert client.get('/register').status_code == 200; assert client.post('/register', data={'name': 'Jenkins User', 'email': 'jenkins@example.com', 'password': 'secret'}).status_code == 302; assert client.post('/login', data={'email': 'jenkins@example.com', 'password': 'secret'}).status_code == 302; assert client.get('/dashboard').get_data(as_text=True).find('<h1>Your dashboard</h1>') >= 0; print('Application smoke checks passed.')"
+                '''
+            }
+        }
+
+        stage('Package') {
+            steps {
+                archiveArtifacts artifacts: 'app.py,login.html,register.html,user.html', fingerprint: true
+            }
+        }
+
+        stage('Deploy') {
+            when {
+                expression {
+                    params.DEPLOY
+                }
+            }
+            steps {
+                bat '''
+                    if not exist "%DEPLOY_PATH%" mkdir "%DEPLOY_PATH%"
+                    copy /Y app.py "%DEPLOY_PATH%\\app.py"
+                    copy /Y login.html "%DEPLOY_PATH%\\login.html"
+                    copy /Y register.html "%DEPLOY_PATH%\\register.html"
+                    copy /Y user.html "%DEPLOY_PATH%\\user.html"
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'CI completed successfully.'
+        }
+        failure {
+            echo 'CI failed. Deployment was not performed.'
+        }
+    }
+}
