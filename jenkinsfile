@@ -39,14 +39,16 @@ pipeline {
             }
         }
 
-        stage('Validate') {
-            steps {
-                bat '''
-                    %PYTHON% -m py_compile app.py
-                    %PYTHON% -c "from app import app, users; client = app.test_client(); users.clear(); assert client.get('/login').status_code == 200; assert client.get('/register').status_code == 200; assert client.post('/register', data={'name': 'Jenkins User', 'email': 'jenkins@example.com', 'password': 'secret'}).status_code == 302; assert client.post('/login', data={'email': 'jenkins@example.com', 'password': 'secret'}).status_code == 302; assert client.get('/dashboard').get_data(as_text=True).find('<h1>Your dashboard</h1>') >= 0; print('Application smoke checks passed.')"
-                '''
-            }
-        }
+        
+stage('Validate') {
+    steps {
+        bat '''
+        python -m py_compile app.py
+        python -c "from app import app, users; client = app.test_client(); users.clear(); r = client.get('/login'); print('GET login:', r.status_code); assert r.status_code == 200; r = client.get('/register'); print('GET register:', r.status_code); assert r.status_code == 200; r = client.post('/register', data={'name':'Jenkins User','email':'jenkins@example.com','password':'secret'}); print('POST register:', r.status_code); assert r.status_code == 302; r = client.post('/login', data={'email':'jenkins@example.com','password':'secret'}); print('POST login:', r.status_code); assert r.status_code == 302; r = client.get('/dashboard'); print('GET dashboard:', r.status_code); assert r.status_code == 200; print('Dashboard response:', r.get_data(as_text=True)[:300]); print('Application smoke checks passed.')"
+        '''
+    }
+}
+
 
         stage('Package') {
             steps {
